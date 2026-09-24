@@ -1,0 +1,21 @@
+{
+  "availability_lag_days": 1,
+  "columns": [
+    "timestamp",
+    "value"
+  ],
+  "file": "example_features.csv",
+  "frequency": "daily",
+  "manifest_version": 1,
+  "methodology_version": "synthetic-v1",
+  "metric_id": "synthetic_daily_value",
+  "observation_timezone": "UTC",
+  "retrieved_at": "2026-09-21T00:00:00Z",
+  "row_count": 1,
+  "series_kind": "raw",
+  "sha256": "72bfb2be4f17e77986cdcb23cbaca27eeeafc304f788de0981a7eee9837ba811",
+  "source_url": "synthetic://onchain-research-notebooks/example_features",
+  "transformations": [
+    "hand-written synthetic example"
+  ]
+}

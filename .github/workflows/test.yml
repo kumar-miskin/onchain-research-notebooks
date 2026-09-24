@@ -9,3 +9,4 @@ jobs:
         with: {python-version: '3.12'}
       - run: pip install -e '.[dev]'
       - run: pytest -q
+      - run: python -m onchain_research.manifest validate data/*.csv
