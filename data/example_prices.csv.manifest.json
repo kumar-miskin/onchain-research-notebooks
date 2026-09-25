@@ -1,0 +1,21 @@
+{
+  "availability_lag_days": 0,
+  "columns": [
+    "timestamp",
+    "close"
+  ],
+  "file": "example_prices.csv",
+  "frequency": "daily",
+  "manifest_version": 1,
+  "methodology_version": "synthetic-v1",
+  "metric_id": "synthetic_daily_close",
+  "observation_timezone": "UTC",
+  "retrieved_at": "2026-09-21T00:00:00Z",
+  "row_count": 2,
+  "series_kind": "raw",
+  "sha256": "0bb332486b19a0830e21a408c28fc4ec6bd8dcfce604e6ff5f66871f94c76d00",
+  "source_url": "synthetic://onchain-research-notebooks/example_prices",
+  "transformations": [
+    "hand-written synthetic example"
+  ]
+}
