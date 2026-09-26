@@ -16,7 +16,7 @@ python -m onchain_research.asof \
 
 ## Input contracts
 
-Prices: `timestamp,close`. Features: `timestamp,value`. Timestamps must include a timezone or are interpreted as UTC. The output retains `feature_observed_at` and `feature_available_at` so the alignment can be audited.
+Prices: `timestamp,close`. Features: `timestamp,value`. Timestamps must include a timezone or are interpreted as UTC. The output retains `feature_observed_at` and `feature_available_at` so the alignment can be audited. Input rows with duplicate or null timestamps, null price/feature values, or invalid lags are rejected: a later null release must not silently shadow a usable earlier value, and ties must not arbitrarily select one of two revisions. Unmatched prices before the first release remain unpaired in the output.
 
 ## Point-in-time manifests
 

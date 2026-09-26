@@ -9,9 +9,35 @@ def _utc(series: pd.Series) -> pd.Series:
 
 
 def align_asof(prices: pd.DataFrame, features: pd.DataFrame, lag_days: int = 1) -> pd.DataFrame:
-    if lag_days < 0: raise ValueError("lag_days must be non-negative")
+    """Join each price to one available observation, rejecting ambiguous inputs.
+
+    A duplicate timestamp with different values has no deterministic meaning
+    under merge_asof: whichever row happens to sort last silently wins. A null
+    value in a later release can similarly hide an earlier valid observation.
+    Reject both rather than manufacturing an apparently point-in-time result.
+    """
+    if isinstance(lag_days, bool) or not isinstance(lag_days, int) or lag_days < 0:
+        raise ValueError("lag_days must be a non-negative integer")
+    if prices.empty or features.empty:
+        raise ValueError("price and feature tables must not be empty")
+    for name, frame, required in (
+        ("prices", prices, ("timestamp", "close")),
+        ("features", features, ("timestamp", "value")),
+    ):
+        missing = set(required) - set(frame.columns)
+        if missing:
+            raise ValueError(f"{name} missing columns: {', '.join(sorted(missing))}")
+        if frame["timestamp"].isna().any() or frame["timestamp"].duplicated().any():
+            raise ValueError(f"{name} has null or duplicate timestamps")
+        measure = required[1]
+        if frame[measure].isna().any():
+            raise ValueError(f"{name} has null {measure} values")
     p = prices.assign(timestamp=_utc(prices.timestamp)).sort_values("timestamp")
     f = features.assign(feature_observed_at=_utc(features.timestamp)).drop(columns="timestamp")
+    if p.timestamp.isna().any() or f.feature_observed_at.isna().any():
+        raise ValueError("parsed timestamps must not be null")
+    if p.timestamp.duplicated().any() or f.feature_observed_at.duplicated().any():
+        raise ValueError("price or feature timestamps duplicate after normalization")
     f["feature_available_at"] = f.feature_observed_at + pd.Timedelta(days=lag_days)
     f = f.sort_values("feature_available_at")
     return pd.merge_asof(p, f, left_on="timestamp", right_on="feature_available_at", direction="backward")
