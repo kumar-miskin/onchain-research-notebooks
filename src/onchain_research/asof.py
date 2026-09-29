@@ -2,6 +2,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 import pandas as pd
+from math import isfinite
 
 
 def _utc(series: pd.Series) -> pd.Series:
@@ -32,6 +33,9 @@ def align_asof(prices: pd.DataFrame, features: pd.DataFrame, lag_days: int = 1) 
         measure = required[1]
         if frame[measure].isna().any():
             raise ValueError(f"{name} has null {measure} values")
+        measure_values = pd.to_numeric(frame[measure], errors="coerce")
+        if measure_values.isna().any() or not measure_values.map(isfinite).all():
+            raise ValueError(f"{name} has non-finite or non-numeric {measure} values")
     p = prices.assign(timestamp=_utc(prices.timestamp)).sort_values("timestamp")
     f = features.assign(feature_observed_at=_utc(features.timestamp)).drop(columns="timestamp")
     if p.timestamp.isna().any() or f.feature_observed_at.isna().any():
