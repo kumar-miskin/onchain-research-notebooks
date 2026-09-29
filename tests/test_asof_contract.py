@@ -30,3 +30,16 @@ def test_empty_feature_table_and_duplicate_price_timestamp_fail():
         align_asof(PRICES, FEATURES.iloc[:0])
     with pytest.raises(ValueError, match='duplicate'):
         align_asof(pd.concat([PRICES, PRICES.iloc[[0]]]), FEATURES)
+
+
+@pytest.mark.parametrize("column, bad_value", [
+    ("close", float("inf")), ("close", float("-inf")), ("close", "not-a-price"),
+    ("value", float("inf")), ("value", float("-inf")), ("value", "not-a-feature"),
+])
+def test_nonfinite_and_nonnumeric_measurements_fail(column, bad_value):
+    p, f = PRICES.copy(), FEATURES.copy()
+    target = p if column == "close" else f
+    target[column] = target[column].astype(object)
+    target.loc[0, column] = bad_value
+    with pytest.raises(ValueError, match="non-finite or non-numeric"):
+        align_asof(p, f)
