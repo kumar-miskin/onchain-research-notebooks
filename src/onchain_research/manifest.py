@@ -13,6 +13,7 @@ import json
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 
@@ -80,6 +81,45 @@ def _check_values(d: dict) -> None:
         raise ManifestError("availability_lag_days must be a non-negative integer")
     if d["manifest_version"] != MANIFEST_VERSION:
         raise ManifestError(f"unsupported manifest_version {d['manifest_version']!r}")
+    try:
+        ZoneInfo(d["observation_timezone"])
+    except Exception as e:
+        raise ManifestError(f"unknown observation_timezone {d['observation_timezone']!r}") from e
+
+
+def _check_series(data_path: Path, d: dict) -> None:
+    """Fail when a CSV's timestamps contradict its declared frequency or timezone.
+
+    A manifest that says "daily, UTC" next to hourly rows, or daily rows stamped
+    at 09:30 UTC, silently changes what an availability lag means. Check the
+    data against the declaration instead of trusting the label.
+    """
+    frame = pd.read_csv(data_path)
+    if "timestamp" not in frame.columns:
+        raise ManifestError(f"{data_path.name} has no timestamp column to check against the manifest")
+    try:
+        tz = ZoneInfo(d["observation_timezone"])
+    except Exception as e:
+        raise ManifestError(f"unknown observation_timezone {d['observation_timezone']!r}") from e
+    ts = pd.to_datetime(frame["timestamp"], utc=True, errors="coerce")
+    if ts.isna().any():
+        raise ManifestError(f"{data_path.name} has unparsable timestamps")
+    if ts.duplicated().any():
+        raise ManifestError(f"{data_path.name} has duplicate timestamps")
+    freq = d["frequency"]
+    if freq == "block":
+        return  # block-height series are not wall-clock regular
+    local = ts.dt.tz_convert(tz)
+    if freq == "daily":
+        aligned = (local.dt.hour == 0) & (local.dt.minute == 0) & (local.dt.second == 0)
+    else:
+        aligned = (local.dt.minute == 0) & (local.dt.second == 0)
+    aligned &= (local.dt.microsecond == 0) & (local.dt.nanosecond == 0)
+    if not aligned.all():
+        raise ManifestError(
+            f"timestamps in {data_path.name} are not aligned to {freq} boundaries "
+            f"in {d['observation_timezone']}"
+        )
 
 
 def build_manifest(
@@ -89,6 +129,7 @@ def build_manifest(
 ) -> Manifest:
     data_path = Path(data_path)
     frame = pd.read_csv(data_path)
+    _check_series(data_path, {"frequency": frequency, "observation_timezone": observation_timezone})
     m = Manifest(
         file=data_path.name, sha256=sha256_file(data_path), row_count=len(frame),
         columns=list(frame.columns), source_url=source_url, metric_id=metric_id,
@@ -129,6 +170,7 @@ def validate(data_path: Path) -> dict:
     rows = len(pd.read_csv(data_path))
     if rows != d["row_count"]:
         raise ManifestError(f"{data_path.name} has {rows} rows, manifest says {d['row_count']}")
+    _check_series(data_path, d)
     return d
 
 

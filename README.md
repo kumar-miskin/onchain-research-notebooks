@@ -33,7 +33,9 @@ python -m onchain_research.asof --check-manifests --lag-days 1 \
   --prices data/example_prices.csv --features data/example_features.csv --out aligned.csv
 ```
 
-A rerun with `--check-manifests` fails if a file's bytes or row count changed, a required field is missing, or `--lag-days` disagrees with the recorded availability lag. The aligned output keeps both `feature_observed_at` and `feature_available_at`.
+A rerun with `--check-manifests` fails if a file's bytes or row count changed, a required field is missing, or `--lag-days` disagrees with the recorded availability lag.
+
+Writing or validating a manifest also checks the data against its own declaration: timestamps must parse, be unique, and align to the declared frequency boundaries in the declared `observation_timezone` (midnight local for `daily`, the top of the hour for `hourly`; `block` series are not wall-clock regular and skip the alignment check). An unknown timezone name is rejected. A manifest that says "daily, UTC" beside hourly rows, or beside rows stamped at midnight in another timezone, fails instead of silently changing what the availability lag means. Local-midnight series remain valid across daylight-saving transitions. The aligned output keeps both `feature_observed_at` and `feature_available_at`.
 
 `series_kind` is one of:
 
