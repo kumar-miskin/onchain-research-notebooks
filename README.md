@@ -70,3 +70,11 @@ Expired rows keep their price but have missing feature value and provenance
 columns, just like rows before the first release. They must not be treated as
 zero or forward-filled back into a usable signal. Choose the age limit from
 the source's publication contract, not by optimizing a backtest.
+
+Manifests with a non-UTC `observation_timezone` require explicit offsets on
+every input timestamp. A naive midnight is not assumed to be local midnight:
+the alignment pipeline normalizes naive timestamps as UTC, so such an input
+would otherwise silently shift availability. Mixed naive/offset-aware input
+is rejected. UTC-only naive inputs remain supported. At DST transitions,
+explicit offsets disambiguate repeated local hours and avoid nonexistent
+wall-clock times; record actual observed instants, not guessed offsets.
