@@ -9,16 +9,20 @@ def _utc(series: pd.Series) -> pd.Series:
     return pd.to_datetime(series, utc=True)
 
 
-def align_asof(prices: pd.DataFrame, features: pd.DataFrame, lag_days: int = 1) -> pd.DataFrame:
+def align_asof(prices: pd.DataFrame, features: pd.DataFrame, lag_days: int = 1, max_age_days: int | None = None) -> pd.DataFrame:
     """Join each price to one available observation, rejecting ambiguous inputs.
 
     A duplicate timestamp with different values has no deterministic meaning
     under merge_asof: whichever row happens to sort last silently wins. A null
     value in a later release can similarly hide an earlier valid observation.
     Reject both rather than manufacturing an apparently point-in-time result.
+    max_age_days optionally expires releases after that many elapsed days
+    since availability (inclusive), without dropping the price observation.
     """
     if isinstance(lag_days, bool) or not isinstance(lag_days, int) or lag_days < 0:
         raise ValueError("lag_days must be a non-negative integer")
+    if max_age_days is not None and (isinstance(max_age_days, bool) or not isinstance(max_age_days, int) or max_age_days < 0):
+        raise ValueError("max_age_days must be a non-negative integer or None")
     if prices.empty or features.empty:
         raise ValueError("price and feature tables must not be empty")
     for name, frame, required in (
@@ -44,7 +48,11 @@ def align_asof(prices: pd.DataFrame, features: pd.DataFrame, lag_days: int = 1) 
         raise ValueError("price or feature timestamps duplicate after normalization")
     f["feature_available_at"] = f.feature_observed_at + pd.Timedelta(days=lag_days)
     f = f.sort_values("feature_available_at")
-    return pd.merge_asof(p, f, left_on="timestamp", right_on="feature_available_at", direction="backward")
+    return pd.merge_asof(
+        p, f, left_on="timestamp", right_on="feature_available_at",
+        direction="backward",
+        tolerance=None if max_age_days is None else pd.Timedelta(days=max_age_days),
+    )
 
 
 def check_inputs(prices: Path, features: Path, lag_days: int) -> None:
@@ -61,9 +69,10 @@ def check_inputs(prices: Path, features: Path, lag_days: int) -> None:
 
 def main(argv: list[str] | None = None) -> None:
     p=argparse.ArgumentParser(); p.add_argument("--prices", type=Path, required=True); p.add_argument("--features", type=Path, required=True); p.add_argument("--lag-days", type=int, default=1); p.add_argument("--out", type=Path, required=True)
+    p.add_argument("--max-age-days", type=int, help="maximum elapsed days since feature availability, inclusive; default has no expiry")
     p.add_argument("--check-manifests", action="store_true", help="validate inputs against their .manifest.json files first")
     a=p.parse_args(argv)
     if a.check_manifests: check_inputs(a.prices, a.features, a.lag_days)
-    align_asof(pd.read_csv(a.prices), pd.read_csv(a.features), a.lag_days).to_csv(a.out,index=False)
+    align_asof(pd.read_csv(a.prices), pd.read_csv(a.features), a.lag_days, a.max_age_days).to_csv(a.out,index=False)
 
 if __name__ == "__main__": main()

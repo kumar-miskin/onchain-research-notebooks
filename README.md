@@ -54,3 +54,19 @@ The CSVs are stored with `-text` in `.gitattributes` so line-ending conversion c
 - Do not infer causality from same-period correlation.
 
 This repository uses public or synthetic data only.
+
+### Expire stale feature releases
+
+An as-of join can carry an old feature indefinitely when a source stops
+publishing. Set `--max-age-days N` to accept a release only within N elapsed
+24-hour days of its `feature_available_at` time, inclusive. For example,
+`--lag-days 1 --max-age-days 2` allows an observation one day after observation
+and for two days after that release. The age is not measured from observation
+itself and does not count local calendar days across DST. Zero requires an
+exact availability-time match. Negative, fractional and boolean API values
+are rejected. The default is no expiry for backward compatibility.
+
+Expired rows keep their price but have missing feature value and provenance
+columns, just like rows before the first release. They must not be treated as
+zero or forward-filled back into a usable signal. Choose the age limit from
+the source's publication contract, not by optimizing a backtest.
