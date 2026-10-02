@@ -147,3 +147,20 @@ def test_subsecond_rows_are_off_frequency_boundary(tmp_path, frequency, stamp):
     csv = _write(tmp_path, [(stamp, 1.0)])
     with pytest.raises(ManifestError, match="aligned"):
         build_manifest(csv, **{**KW, "frequency": frequency})
+
+
+@pytest.mark.parametrize('columns', [['timestamp','wrong'],['value','timestamp'],[], 'timestamp,value'])
+def test_recorded_columns_must_match_csv(csv,columns):
+    write_manifest(csv,build_manifest(csv,**KW))
+    path=manifest_path(csv);d=json.loads(path.read_text());d['columns']=columns
+    path.write_text(json.dumps(d))
+    with pytest.raises(ManifestError,match='columns'):
+        validate(csv)
+
+
+def test_invalid_retrieval_timestamp_in_loaded_manifest_fails(csv):
+    write_manifest(csv,build_manifest(csv,**KW))
+    path=manifest_path(csv);d=json.loads(path.read_text());d['retrieved_at']='yesterday'
+    path.write_text(json.dumps(d))
+    with pytest.raises(ManifestError,match='retrieved_at'):
+        validate(csv)

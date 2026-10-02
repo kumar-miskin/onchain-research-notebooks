@@ -72,6 +72,12 @@ def _check_values(d: dict) -> None:
     missing = [k for k in REQUIRED_FIELDS if d.get(k) in (None, "")]
     if missing:
         raise ManifestError(f"manifest missing required fields: {', '.join(missing)}")
+    if not isinstance(d["columns"], list) or not d["columns"] or any(not isinstance(c, str) for c in d["columns"]):
+        raise ManifestError("columns must be a non-empty list of column names")
+    try:
+        _utc_iso(d["retrieved_at"])
+    except Exception as exc:
+        raise ManifestError("retrieved_at must be a valid timezone-aware timestamp") from exc
     if d["series_kind"] not in SERIES_KINDS:
         raise ManifestError(f"series_kind must be one of {SERIES_KINDS}, got {d['series_kind']!r}")
     if d["frequency"] not in FREQUENCIES:
@@ -167,7 +173,10 @@ def validate(data_path: Path) -> dict:
             f"{data_path.name} changed since it was recorded "
             f"(sha256 {digest[:12]} != manifest {d['sha256'][:12]}); re-record the source before rerunning"
         )
-    rows = len(pd.read_csv(data_path))
+    frame = pd.read_csv(data_path)
+    if list(frame.columns) != d["columns"]:
+        raise ManifestError(f"{data_path.name} columns disagree with the manifest")
+    rows = len(frame)
     if rows != d["row_count"]:
         raise ManifestError(f"{data_path.name} has {rows} rows, manifest says {d['row_count']}")
     _check_series(data_path, d)
