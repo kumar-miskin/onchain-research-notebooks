@@ -149,6 +149,30 @@ def test_subsecond_rows_are_off_frequency_boundary(tmp_path, frequency, stamp):
         build_manifest(csv, **{**KW, "frequency": frequency})
 
 
+def test_naive_non_utc_timestamps_require_explicit_offsets(tmp_path):
+    csv = _write(tmp_path, [('2026-03-08T00:00:00',1),('2026-03-09T00:00:00',2)])
+    with pytest.raises(ManifestError,match='explicit timestamp offsets'):
+        build_manifest(csv,**{**KW,'observation_timezone':'America/New_York'})
+
+
+def test_mixed_naive_and_aware_timestamps_are_rejected(tmp_path):
+    csv=_write(tmp_path,[('2026-01-01T00:00:00',1),('2026-01-02T00:00:00Z',2)])
+    with pytest.raises(ManifestError,match='mixed'):
+        build_manifest(csv,**KW)
+
+
+def test_ambiguous_local_hour_is_rejected(tmp_path):
+    csv=_write(tmp_path,[('2026-11-01T01:00:00',1)])
+    with pytest.raises(ManifestError,match='ambiguous|nonexistent'):
+        build_manifest(csv,**{**KW,'observation_timezone':'America/New_York','frequency':'hourly'})
+
+
+def test_nonexistent_local_hour_is_rejected(tmp_path):
+    csv=_write(tmp_path,[('2026-03-08T02:00:00',1)])
+    with pytest.raises(ManifestError,match='ambiguous|nonexistent'):
+        build_manifest(csv,**{**KW,'observation_timezone':'America/New_York','frequency':'hourly'})
+
+
 @pytest.mark.parametrize('columns', [['timestamp','wrong'],['value','timestamp'],[], 'timestamp,value'])
 def test_recorded_columns_must_match_csv(csv,columns):
     write_manifest(csv,build_manifest(csv,**KW))
