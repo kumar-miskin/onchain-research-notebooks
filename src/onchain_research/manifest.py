@@ -107,7 +107,19 @@ def _check_series(data_path: Path, d: dict) -> None:
         tz = ZoneInfo(d["observation_timezone"])
     except Exception as e:
         raise ManifestError(f"unknown observation_timezone {d['observation_timezone']!r}") from e
-    ts = pd.to_datetime(frame["timestamp"], utc=True, errors="coerce")
+    try:
+        parsed = [pd.Timestamp(value) for value in frame["timestamp"]]
+    except Exception as exc:
+        raise ManifestError(f"{data_path.name} has unparsable timestamps") from exc
+    aware = [value.tzinfo is not None for value in parsed]
+    if any(aware) and not all(aware):
+        raise ManifestError(f"{data_path.name} has mixed naive and timezone-aware timestamps")
+    if not any(aware) and d["observation_timezone"] != "UTC":
+        raise ManifestError(
+            "non-UTC observation_timezone requires explicit timestamp offsets; "
+            "naive local hours can be ambiguous or nonexistent at DST transitions"
+        )
+    ts = pd.Series(pd.to_datetime(parsed, utc=True, errors="coerce"), index=frame.index)
     if ts.isna().any():
         raise ManifestError(f"{data_path.name} has unparsable timestamps")
     if ts.duplicated().any():
