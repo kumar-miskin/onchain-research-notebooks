@@ -72,6 +72,12 @@ def _check_values(d: dict) -> None:
     missing = [k for k in REQUIRED_FIELDS if d.get(k) in (None, "")]
     if missing:
         raise ManifestError(f"manifest missing required fields: {', '.join(missing)}")
+    if not isinstance(d["columns"], list) or not d["columns"] or any(not isinstance(c, str) for c in d["columns"]):
+        raise ManifestError("columns must be a non-empty list of column names")
+    try:
+        _utc_iso(d["retrieved_at"])
+    except Exception as exc:
+        raise ManifestError("retrieved_at must be a valid timezone-aware timestamp") from exc
     if d["series_kind"] not in SERIES_KINDS:
         raise ManifestError(f"series_kind must be one of {SERIES_KINDS}, got {d['series_kind']!r}")
     if d["frequency"] not in FREQUENCIES:
@@ -101,7 +107,19 @@ def _check_series(data_path: Path, d: dict) -> None:
         tz = ZoneInfo(d["observation_timezone"])
     except Exception as e:
         raise ManifestError(f"unknown observation_timezone {d['observation_timezone']!r}") from e
-    ts = pd.to_datetime(frame["timestamp"], utc=True, errors="coerce")
+    try:
+        parsed = [pd.Timestamp(value) for value in frame["timestamp"]]
+    except Exception as exc:
+        raise ManifestError(f"{data_path.name} has unparsable timestamps") from exc
+    aware = [value.tzinfo is not None for value in parsed]
+    if any(aware) and not all(aware):
+        raise ManifestError(f"{data_path.name} has mixed naive and timezone-aware timestamps")
+    if not any(aware) and d["observation_timezone"] != "UTC":
+        raise ManifestError(
+            "non-UTC observation_timezone requires explicit timestamp offsets; "
+            "naive local hours can be ambiguous or nonexistent at DST transitions"
+        )
+    ts = pd.Series(pd.to_datetime(parsed, utc=True, errors="coerce"), index=frame.index)
     if ts.isna().any():
         raise ManifestError(f"{data_path.name} has unparsable timestamps")
     if ts.duplicated().any():
@@ -167,7 +185,10 @@ def validate(data_path: Path) -> dict:
             f"{data_path.name} changed since it was recorded "
             f"(sha256 {digest[:12]} != manifest {d['sha256'][:12]}); re-record the source before rerunning"
         )
-    rows = len(pd.read_csv(data_path))
+    frame = pd.read_csv(data_path)
+    if list(frame.columns) != d["columns"]:
+        raise ManifestError(f"{data_path.name} columns disagree with the manifest")
+    rows = len(frame)
     if rows != d["row_count"]:
         raise ManifestError(f"{data_path.name} has {rows} rows, manifest says {d['row_count']}")
     _check_series(data_path, d)
